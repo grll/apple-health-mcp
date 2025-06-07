@@ -45,7 +45,7 @@ CONTAINER_WORKSPACE="/workspaces/$(basename "$WORKTREE_DIR")"
 
 # Open VSCode Insiders in devcontainer
 echo "Opening VSCode Insiders..."
-code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED_PATH}${CONTAINER_WORKSPACE}"
+code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED_PATH}${CONTAINER_WORKSPACE}" --disable-workspace-trust
 
 echo ""
 echo "Cleanup commands:"
