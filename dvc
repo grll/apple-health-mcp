@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# dvc - Dev Container: Open VSCode Insiders in devcontainer using git worktree
+
+# Check if in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo "Error: Not in a git repository"
+    exit 1
+fi
+
+# Get repository root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_NAME=$(basename "$REPO_ROOT")
+
+# Generate branch name based on argument or ISO datetime
+if [ $# -eq 1 ]; then
+    # Extract issue number from argument (e.g., #1 -> issue-1)
+    ISSUE_NUM=$(echo "$1" | sed 's/^#//')
+    BRANCH_NAME="dvc-issue-${ISSUE_NUM}"
+    DIR_SUFFIX="issue-${ISSUE_NUM}"
+else
+    # Use ISO 8601 format datetime
+    ISO_DATETIME=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
+    BRANCH_NAME="dvc-${ISO_DATETIME}"
+    DIR_SUFFIX="${ISO_DATETIME}"
+fi
+
+WORKTREE_DIR="/tmp/dvc-${REPO_NAME}-${DIR_SUFFIX}"
+
+echo "Creating isolated dev container..."
+echo "Worktree: $WORKTREE_DIR"
+echo "Branch: $BRANCH_NAME"
+
+# Create new worktree with new branch
+git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" HEAD
+
+# Encode the path for VSCode URL (hex encoding)
+ENCODED_PATH=$(printf '%s' "$WORKTREE_DIR" | xxd -p | tr -d '\n')
+
+# Open VSCode Insiders in devcontainer
+echo "Opening VSCode Insiders..."
+code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED_PATH}${WORKTREE_DIR}"
+
+echo ""
+echo "Cleanup commands:"
+echo "  Close VSCode, then run:"
+echo "  git worktree remove '$WORKTREE_DIR'"
+echo "  git branch -d '$BRANCH_NAME'"
