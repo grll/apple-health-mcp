@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# dvc - Dev Container: Open VSCode Insiders in devcontainer using git worktree
+# dvc - Dev Container: Open VSCode Insiders in devcontainer using git clone
 
 # Check if in a git repository
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
@@ -25,23 +25,38 @@ else
     DIR_SUFFIX="${ISO_DATETIME}"
 fi
 
-WORKTREE_DIR="/tmp/dvc-${REPO_NAME}-${DIR_SUFFIX}"
+CLONE_DIR="/tmp/dvc-${REPO_NAME}-${DIR_SUFFIX}"
+
+# Get current branch
+CURRENT_BRANCH=$(git branch --show-current)
 
 echo "Creating isolated dev container..."
-echo "Worktree: $WORKTREE_DIR"
+echo "Clone directory: $CLONE_DIR"
 echo "Branch: $BRANCH_NAME"
+echo "Source: $REPO_ROOT"
 
-# Create new worktree with new branch
-git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" HEAD
+# Clone from the local repository
+git clone "file://${REPO_ROOT}" "$CLONE_DIR"
+
+# Change to clone directory and create new branch
+cd "$CLONE_DIR"
+git checkout -b "$BRANCH_NAME"
+
+# Update origin to point to the actual remote (not the local clone source)
+if ORIGIN_URL=$(cd "$REPO_ROOT" && git config --get remote.origin.url); then
+    git remote set-url origin "$ORIGIN_URL"
+fi
+
+cd - > /dev/null
 
 # Get the absolute path
-WORKTREE_DIR=$(realpath "$WORKTREE_DIR")
+CLONE_DIR=$(realpath "$CLONE_DIR")
 
-# Encode the worktree path for devcontainer URL
-ENCODED_PATH=$(printf "%s" "$WORKTREE_DIR" | xxd -p -c 256)
+# Encode the clone path for devcontainer URL
+ENCODED_PATH=$(printf "%s" "$CLONE_DIR" | xxd -p -c 256)
 
 # The workspace folder inside the container defaults to /workspaces/{folder-name}
-CONTAINER_WORKSPACE="/workspaces/$(basename "$WORKTREE_DIR")"
+CONTAINER_WORKSPACE="/workspaces/$(basename "$CLONE_DIR")"
 
 # Open VSCode Insiders in devcontainer
 echo "Opening VSCode Insiders..."
@@ -50,5 +65,4 @@ code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED
 echo ""
 echo "Cleanup commands:"
 echo "  Close VSCode, then run:"
-echo "  git worktree remove '$WORKTREE_DIR'"
-echo "  git branch -d '$BRANCH_NAME'"
+echo "  rm -rf '$CLONE_DIR'"
