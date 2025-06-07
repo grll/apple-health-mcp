@@ -34,12 +34,18 @@ echo "Branch: $BRANCH_NAME"
 # Create new worktree with new branch
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" HEAD
 
-# Encode the path for VSCode URL (hex encoding)
-ENCODED_PATH=$(printf '%s' "$WORKTREE_DIR" | xxd -p | tr -d '\n')
+# Get the absolute path
+WORKTREE_DIR=$(realpath "$WORKTREE_DIR")
+
+# Encode the worktree path for devcontainer URL
+ENCODED_PATH=$(printf "%s" "$WORKTREE_DIR" | xxd -p -c 256)
+
+# The workspace folder inside the container defaults to /workspaces/{folder-name}
+CONTAINER_WORKSPACE="/workspaces/$(basename "$WORKTREE_DIR")"
 
 # Open VSCode Insiders in devcontainer
 echo "Opening VSCode Insiders..."
-code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED_PATH}${WORKTREE_DIR}"
+code-insiders --new-window --folder-uri "vscode-remote://dev-container+${ENCODED_PATH}${CONTAINER_WORKSPACE}"
 
 echo ""
 echo "Cleanup commands:"
