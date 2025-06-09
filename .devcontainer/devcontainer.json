@@ -18,7 +18,7 @@
     "source=${localEnv:HOME}/.claude.json,target=/root/host.claude.json,type=bind,readonly",
   
     // here can add more mounts in our case we might want to mount the data in read only
-    "source=/home/guillaume/Projects/apple-health-mcp/data/export/apple_health_export/export.xml,target=${remoteWorkspaceFolder}/data/export/apple_health_export/export.xml,type=bind,readonly"
+    "source=/home/guillaume/Projects/apple-health-mcp/data/export/apple_health_export/export.xml,target=/data/export/apple_health_export/export.xml,type=bind,readonly"
   ],
 
   "postStartCommand": ".devcontainer/poststartcommand.sh"
