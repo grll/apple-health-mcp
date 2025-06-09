@@ -38,5 +38,5 @@ PROJECT_CONFIG='{
 }'
 
 # Add project configuration to .claude.json
-jq --arg dir "$CURRENT_DIR" --argjson config "$PROJECT_CONFIG" '.project[$dir] = $config' $HOME/host.claude.json > $HOME/.claude.json
+jq --arg dir "$CURRENT_DIR" --argjson config "$PROJECT_CONFIG" '.projects[$dir] = $config' $HOME/host.claude.json > $HOME/.claude.json
 
