@@ -10,7 +10,7 @@ source .venv/bin/activate
 pre-commit install
 
 # Write to .claude/settings.json to enable all MCP servers:
-echo '{"enableAllProjectMcpServers": true}' > ~/.claude/settings.local.json
+echo '{"enableAllProjectMcpServers": true}' > .claude/settings.local.json
 
 # Add to trusted Claude Project
 # Get current working directory
