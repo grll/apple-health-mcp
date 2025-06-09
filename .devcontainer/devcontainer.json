@@ -13,8 +13,12 @@
   },
 
   "mounts": [
+    // required for claude to work correctly
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.claude.json,target=/root/host.claude.json,type=bind,readonly"
+    "source=${localEnv:HOME}/.claude.json,target=/root/host.claude.json,type=bind,readonly",
+  
+    // here can add more mounts in our case we might want to mount the data in read only
+    "source=${workspaceFolder}/data/export/apple_health_export/export.xml,target=${workspaceFolder}/data/export/apple_health_export/export.xml,type=bind,readonly"
   ],
 
   "postStartCommand": ".devcontainer/poststartcommand.sh"
