@@ -3,7 +3,7 @@ FROM node:22-slim
 # Install git
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y git gnupg2
+    apt-get install -y git gnupg2 jq
 
 
 # Install UV and python
