@@ -1,0 +1,7 @@
+- ALWAYS strive for the most simple and maintainable solution
+- ALWAYS add package with uv as in `uv add` or `uv add --dev`
+- use python 3.12+ typing annotation (dict, list, | None)
+- ALWAYS format the code with ruff
+- ALWAYS check the code with ruff
+- ALWAYS verify types with mypy
+- Use ZoneInfo from python standard library. Preferred timezone is Europe/Zurich. Preferred format for display is iso.

@@ -1,7 +1,11 @@
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    pass
 
 
 # Enums for known types
@@ -85,13 +89,15 @@ class MetadataEntry(SQLModel, table=True):
     value: str
 
     # Polymorphic discriminator and ID
-    parent_type: str  # 'record', 'correlation', 'workout', etc.
-    parent_id: int
+    parent_type: str = Field(index=True)  # 'record', 'correlation', 'workout', etc.
+    parent_id: int = Field(index=True)
 
-    __table_args__ = (
-        # Composite index for efficient lookups
-        {"__index_elements__": [("parent_type", "parent_id")]},
-    )
+
+class CorrelationRecord(SQLModel, table=True):
+    """Link table for Correlation-Record many-to-many"""
+
+    correlation_id: int = Field(foreign_key="correlation.id", primary_key=True)
+    record_id: int = Field(foreign_key="record.id", primary_key=True)
 
 
 class Record(SourcedBase, table=True):
@@ -109,21 +115,14 @@ class Record(SourcedBase, table=True):
     health_data: HealthData | None = Relationship(back_populates="records")
 
     # Relationships
-    heart_rate_variability_list: "HeartRateVariabilityMetadataList | None" = (
-        Relationship(back_populates="record")
+    heart_rate_variability_list: Optional["HeartRateVariabilityMetadataList"] = Relationship(
+        back_populates="record"
     )
 
     # Many-to-many with correlations
     correlations: list["Correlation"] = Relationship(
-        back_populates="records", link_model="CorrelationRecord"
+        back_populates="records", link_model=CorrelationRecord
     )
-
-
-class CorrelationRecord(SQLModel, table=True):
-    """Link table for Correlation-Record many-to-many"""
-
-    correlation_id: int = Field(foreign_key="correlation.id", primary_key=True)
-    record_id: int = Field(foreign_key="record.id", primary_key=True)
 
 
 class Correlation(SourcedBase, table=True):
@@ -198,7 +197,7 @@ class Workout(SourcedBase, table=True):
     # Relationships
     events: list["WorkoutEvent"] = Relationship(back_populates="workout")
     statistics: list["WorkoutStatistics"] = Relationship(back_populates="workout")
-    route: "WorkoutRoute | None" = Relationship(back_populates="workout")
+    route: Optional["WorkoutRoute"] = Relationship(back_populates="workout")
 
 
 class WorkoutEvent(SQLModel, table=True):
