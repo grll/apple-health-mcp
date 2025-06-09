@@ -14,7 +14,7 @@
 
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.claude.json,target=/root/.claude.json,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude.json,target=/root/host.claude.json,type=bind,readonly"
   ],
 
   "postStartCommand": ".devcontainer/poststartcommand.sh"
