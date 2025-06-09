@@ -4,7 +4,10 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python"
+        "ms-python.python",
+        "matangover.mypy",
+        "charliermarsh.ruff",
+        "Anthropic.claude-code"
       ]
     }
   },
@@ -12,5 +15,7 @@
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude.json,target=/root/.claude.json,type=bind,consistency=cached"
-  ]
+  ],
+
+  "postStartCommand": ".devcontainer/poststartcommand.sh"
 }
