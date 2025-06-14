@@ -9,4 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
+# Ignore data folder but not tests/data
 data/
+!tests/data/
