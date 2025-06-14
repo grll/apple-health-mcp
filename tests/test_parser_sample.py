@@ -28,7 +28,7 @@ from apple_health_mcp.parser import AppleHealthParser
 @pytest.fixture
 def sample_xml_path():
     """Path to the sample export.xml file."""
-    return Path(__file__).parent.parent / "data" / "sample" / "export.xml"
+    return Path(__file__).parent / "data" / "export.xml"
 
 
 @pytest.fixture
