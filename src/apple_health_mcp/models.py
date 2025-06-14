@@ -115,8 +115,8 @@ class Record(SourcedBase, table=True):
     health_data: HealthData | None = Relationship(back_populates="records")
 
     # Relationships
-    heart_rate_variability_list: Optional["HeartRateVariabilityMetadataList"] = Relationship(
-        back_populates="record"
+    heart_rate_variability_list: Optional["HeartRateVariabilityMetadataList"] = (
+        Relationship(back_populates="record")
     )
 
     # Many-to-many with correlations

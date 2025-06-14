@@ -4,7 +4,7 @@
     {
       "label": "Launch Claude CLI",
       "type": "shell",
-      "command": "while [ ! -f $HOME/.claude.json ]; do sleep 1; done && $HOME/.claude/local/node_modules/.bin/claude",
+      "command": "while [ ! -f $HOME/.claude.json ]; do sleep 1; done && $HOME/.claude/local/node_modules/.bin/claude --dangerously-skip-permissions",
       "args": [],
       "isBackground": false,
       "problemMatcher": [],

@@ -202,12 +202,21 @@ class AppleHealthParser:
 
                                     # Create correlation-record link if record was saved
                                     if record.id:
-                                        link = CorrelationRecord(
-                                            correlation_id=current_correlation.id,
-                                            record_id=record.id,
+                                        # Check if link already exists
+                                        existing_link = (
+                                            self._check_duplicate_correlation_record(
+                                                session,
+                                                current_correlation.id,
+                                                record.id,
+                                            )
                                         )
-                                        self._add_to_batch(session, link)
-                                        self.stats["correlation_records"] += 1
+                                        if not existing_link:
+                                            link = CorrelationRecord(
+                                                correlation_id=current_correlation.id,
+                                                record_id=record.id,
+                                            )
+                                            self._add_to_batch(session, link)
+                                            self.stats["correlation_records"] += 1
                                 else:
                                     record = self._parse_record(elem, health_data.id)
 
@@ -602,6 +611,17 @@ class AppleHealthParser:
                 VisionPrescription.type == prescription.type,
                 VisionPrescription.date_issued == prescription.date_issued,
                 VisionPrescription.health_data_id == prescription.health_data_id,
+            )
+        ).first()
+
+    def _check_duplicate_correlation_record(
+        self, session: Session, correlation_id: int, record_id: int
+    ) -> CorrelationRecord | None:
+        """Check if a correlation-record link already exists."""
+        return session.exec(
+            select(CorrelationRecord).where(
+                CorrelationRecord.correlation_id == correlation_id,
+                CorrelationRecord.record_id == record_id,
             )
         ).first()
 

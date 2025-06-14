@@ -5,3 +5,5 @@
 - ALWAYS check the code with ruff
 - ALWAYS verify types with mypy
 - Use ZoneInfo from python standard library. Preferred timezone is Europe/Zurich. Preferred format for display is isoformat.
+- Use TDD London Style approach to tests all your changes.
+- When committing changes or creating PR DO NOT mention Claude Code as co-author.
