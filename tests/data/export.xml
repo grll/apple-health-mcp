@@ -330,7 +330,12 @@
   <MetadataEntry key="HKSleepingWristTemperatureSourceType" value="0"/>
  </Record>
  
- <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Guillaume's Apple Watch" sourceVersion="9.6.3" device="&lt;&lt;HKDevice: 0x533ad2350&gt;, name:Apple Watch, manufacturer:Apple Inc., model:Watch, hardware:Watch4,4, software:9.6.3&gt;" unit="ms" creationDate="2023-11-20 08:00:00 +0100" startDate="2023-11-20 07:55:00 +0100" endDate="2023-11-20 08:00:00 +0100" value="45.3"/>
+ <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Guillaume's Apple Watch" sourceVersion="9.6.3" device="&lt;&lt;HKDevice: 0x533ad2350&gt;, name:Apple Watch, manufacturer:Apple Inc., model:Watch, hardware:Watch4,4, software:9.6.3&gt;" unit="ms" creationDate="2023-11-20 08:00:00 +0100" startDate="2023-11-20 07:55:00 +0100" endDate="2023-11-20 08:00:00 +0100" value="45.3">
+ <HeartRateVariabilityMetadataList>
+  <InstantaneousBeatsPerMinute bpm="72" time="7:47:41.86 PM"/>
+  <InstantaneousBeatsPerMinute bpm="68" time="7:47:53.78 PM"/>
+ </HeartRateVariabilityMetadataList>
+</Record>
  
  <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Health" sourceVersion="17.3" unit="%" creationDate="2024-01-10 10:00:00 +0100" startDate="2024-01-10 10:00:00 +0100" endDate="2024-01-10 10:00:00 +0100" value="98">
   <MetadataEntry key="HKWasUserEntered" value="1"/>

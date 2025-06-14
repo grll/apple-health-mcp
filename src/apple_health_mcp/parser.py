@@ -451,12 +451,20 @@ class AppleHealthParser:
                                 and current_record
                                 and current_record.id
                             ):
-                                current_hrv_list = self._parse_hrv_list(
-                                    current_record.id
+                                # Check for existing HRV list
+                                existing_hrv = self._check_duplicate_hrv_list(
+                                    session, current_record.id
                                 )
-                                session.add(current_hrv_list)
-                                session.commit()  # Need ID for relationships
-                                self.stats["hrv_lists"] += 1
+                                if existing_hrv:
+                                    current_hrv_list = existing_hrv
+                                    self.stats["duplicates"] += 1
+                                else:
+                                    current_hrv_list = self._parse_hrv_list(
+                                        current_record.id
+                                    )
+                                    session.add(current_hrv_list)
+                                    session.commit()  # Need ID for relationships
+                                    self.stats["hrv_lists"] += 1
 
                             # Handle nested elements
                             elif (
@@ -534,7 +542,7 @@ class AppleHealthParser:
                                 and current_hrv_list.id
                             ):
                                 bpm = self._parse_instantaneous_bpm(
-                                    elem, current_hrv_list.id
+                                    elem, current_hrv_list.id, current_record.start_date if current_record else None
                                 )
                                 self._add_to_batch(session, bpm)
 
@@ -853,13 +861,47 @@ class AppleHealthParser:
             )
         ).first()
 
+    def _check_duplicate_hrv_list(
+        self, session: Session, record_id: int
+    ) -> HeartRateVariabilityMetadataList | None:
+        """Check if an HRV list already exists for this record."""
+        return session.exec(
+            select(HeartRateVariabilityMetadataList).where(
+                HeartRateVariabilityMetadataList.record_id == record_id,
+            )
+        ).first()
+
     # Parsing methods remain the same
-    def _parse_datetime(self, date_str: str) -> datetime:
-        """Parse datetime string from Apple Health format."""
-        # Apple Health uses format: "2023-12-31 23:59:59 +0000"
-        dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
-        # Convert to preferred timezone
-        return dt.astimezone(ZoneInfo("Europe/Zurich"))
+    def _parse_datetime(self, date_str: str, base_date: datetime | None = None) -> datetime:
+        """Parse datetime string from Apple Health format.
+        
+        Args:
+            date_str: The datetime or time string to parse
+            base_date: Base date to use for time-only strings (for InstantaneousBeatsPerMinute)
+        """
+        # Check if this is a time-only format like "7:47:41.86 PM"
+        if base_date and ("AM" in date_str or "PM" in date_str) and ":" in date_str and "-" not in date_str:
+            # Parse time-only format and combine with base date
+            try:
+                # Handle formats like "7:47:41.86 PM"
+                time_part = datetime.strptime(date_str, "%I:%M:%S.%f %p").time()
+            except ValueError:
+                try:
+                    # Fallback for formats like "7:47:41 PM" (no microseconds)
+                    time_part = datetime.strptime(date_str, "%I:%M:%S %p").time()
+                except ValueError:
+                    # If all fails, try without seconds
+                    time_part = datetime.strptime(date_str, "%I:%M %p").time()
+            
+            # Combine with base date
+            combined = datetime.combine(base_date.date(), time_part)
+            # Use the same timezone as base_date
+            return combined.replace(tzinfo=base_date.tzinfo)
+        else:
+            # Apple Health standard format: "2023-12-31 23:59:59 +0000"
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
+            # Convert to preferred timezone
+            return dt.astimezone(ZoneInfo("Europe/Zurich"))
 
     def _parse_health_data(self, elem: Any) -> HealthData:
         """Parse HealthData root element."""
@@ -1157,12 +1199,12 @@ class AppleHealthParser:
         return HeartRateVariabilityMetadataList(record_id=record_id)
 
     def _parse_instantaneous_bpm(
-        self, elem: Any, hrv_list_id: int
+        self, elem: Any, hrv_list_id: int, base_date: datetime | None = None
     ) -> InstantaneousBeatsPerMinute:
         """Parse InstantaneousBeatsPerMinute element."""
         return InstantaneousBeatsPerMinute(
             bpm=int(elem.get("bpm")),
-            time=self._parse_datetime(elem.get("time")),
+            time=self._parse_datetime(elem.get("time"), base_date),
             hrv_list_id=hrv_list_id,
         )
 
