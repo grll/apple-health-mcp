@@ -11,5 +11,6 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 RUN uv python install 3.12
 
 # Install Claude Code
+USER node
 RUN npm install -g @anthropic-ai/claude-code
 

@@ -14,9 +14,9 @@
 
   "mounts": [
     // required for claude to work correctly
-    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.claude.json,target=/root/host.claude.json,type=bind,readonly",
-  
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude.json,target=/home/node/.claude.json,type=bind,readonly",
+
     // here can add more mounts in our case we might want to mount the data in read only
     "source=/home/guillaume/Projects/apple-health-mcp/data/export/apple_health_export/export.xml,target=/data/export/apple_health_export/export.xml,type=bind,readonly"
   ],
