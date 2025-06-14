@@ -21,5 +21,6 @@
     "source=/home/guillaume/Projects/apple-health-mcp/data/export/apple_health_export/export.xml,target=/data/export/apple_health_export/export.xml,type=bind,readonly"
   ],
 
-  "postStartCommand": ".devcontainer/poststartcommand.sh"
+  "postStartCommand": ".devcontainer/poststartcommand.sh",
+  "remoteUser": "guillaume"
 }
