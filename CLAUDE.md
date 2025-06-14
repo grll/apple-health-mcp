@@ -4,4 +4,4 @@
 - ALWAYS format the code with ruff
 - ALWAYS check the code with ruff
 - ALWAYS verify types with mypy
-- Use ZoneInfo from python standard library. Preferred timezone is Europe/Zurich. Preferred format for display is iso.
+- Use ZoneInfo from python standard library. Preferred timezone is Europe/Zurich. Preferred format for display is isoformat.
