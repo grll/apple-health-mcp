@@ -19,6 +19,7 @@ from apple_health_mcp.models import (
     Record,
     Workout,
     WorkoutEvent,
+    WorkoutRoute,
     WorkoutStatistics,
 )
 from apple_health_mcp.parser import AppleHealthParser
@@ -219,6 +220,16 @@ class TestParserSample:
             assert hr_stats.minimum == 65
             assert hr_stats.maximum == 125
             assert hr_stats.unit == "count/min"
+
+            # Check WorkoutRoute (should have only one despite duplicate entries)
+            routes = session.exec(
+                select(WorkoutRoute).where(WorkoutRoute.workout_id == walking.id)
+            ).all()
+            assert len(routes) == 1  # Only one route should exist despite duplicates
+            
+            route = routes[0]
+            assert route.source_name == "Guillaume's Apple Watch"
+            assert route.source_version == "11.2"
 
     def test_activity_summaries(self, sample_xml_path, temp_db):
         """Test parsing of activity summaries."""

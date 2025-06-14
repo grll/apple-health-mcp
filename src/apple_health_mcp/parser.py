@@ -455,7 +455,16 @@ class AppleHealthParser:
                                 route = self._parse_workout_route(
                                     elem, current_workout.id
                                 )
-                                self._add_to_batch(session, route)
+
+                                # Check for duplicate WorkoutRoute
+                                existing = self._check_duplicate_workout_route(
+                                    session, route
+                                )
+                                if existing:
+                                    self.stats["duplicates"] += 1
+                                else:
+                                    session.add(route)
+                                    session.commit()  # Immediate commit due to unique constraint
 
                             elif (
                                 elem.tag == "SensitivityPoint"
@@ -601,24 +610,25 @@ class AppleHealthParser:
             # Batch check for existing records of this type
             start_dates = [r.start_date for r in type_records]
             end_dates = [r.end_date for r in type_records]
-            values = [r.value for r in type_records]
 
             # Build query conditions
             stmt = select(Record).where(
                 Record.type == record_type,
                 Record.health_data_id == health_data_id,
             )
-            
+
             if start_dates:
                 from sqlalchemy import or_
+
                 date_conditions = []
                 for i, (start_date, end_date) in enumerate(zip(start_dates, end_dates)):
                     date_conditions.append(
-                        (Record.start_date == start_date) & (Record.end_date == end_date)
+                        (Record.start_date == start_date)
+                        & (Record.end_date == end_date)
                     )
                 if date_conditions:
                     stmt = stmt.where(or_(*date_conditions))
-                    
+
             existing_records = session.exec(stmt).all()
 
             # Create lookup set for existing records
@@ -714,6 +724,7 @@ class AppleHealthParser:
             stmt = stmt.where(Record.value == record.value)
         else:
             from sqlalchemy import sql
+
             stmt = stmt.where(Record.value.is_(sql.null()))
 
         return session.exec(stmt).first()
@@ -799,6 +810,16 @@ class AppleHealthParser:
             select(CorrelationRecord).where(
                 CorrelationRecord.correlation_id == correlation_id,
                 CorrelationRecord.record_id == record_id,
+            )
+        ).first()
+
+    def _check_duplicate_workout_route(
+        self, session: Session, route: WorkoutRoute
+    ) -> WorkoutRoute | None:
+        """Check if a workout route already exists."""
+        return session.exec(
+            select(WorkoutRoute).where(
+                WorkoutRoute.workout_id == route.workout_id,
             )
         ).first()
 
