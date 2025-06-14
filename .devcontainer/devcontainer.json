@@ -22,5 +22,5 @@
   ],
 
   "postStartCommand": ".devcontainer/poststartcommand.sh",
-  "remoteUser": "guillaume"
+  "remoteUser": "node"
 }
