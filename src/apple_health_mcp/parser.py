@@ -34,7 +34,7 @@ from .models import (
 class AppleHealthParser:
     """Parser for Apple Health export XML files with streaming support."""
 
-    def __init__(self, db_path: str = "data/sqlite.db"):
+    def __init__(self, db_path: str = "data/sqlite.db", bulk_mode: bool = True):
         """Initialize parser with database connection."""
         # Create data directory if it doesn't exist
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -43,9 +43,28 @@ class AppleHealthParser:
         self.engine = create_engine(f"sqlite:///{db_path}")
         SQLModel.metadata.create_all(self.engine)
 
+        # Add performance indexes
+        self._create_indexes()
+
         # Batch processing settings
-        self.batch_size = 1000
+        self.bulk_mode = bulk_mode
+        self.batch_size = 5000 if bulk_mode else 1000
+        self.transaction_batch_size = 100  # Commit every N entities
         self.current_batch: list[Any] = []
+        self.pending_commits = 0
+
+        # Bulk processing collections
+        self.records_batch: list[Record] = []
+        self.workouts_batch: list[Workout] = []
+        self.correlations_batch: list[Correlation] = []
+        self.metadata_batch: list[MetadataEntry] = []
+
+        # Maps for deferred ID resolution
+        self.record_temp_ids: dict[str, int] = {}  # temp_id -> actual_id
+        self.workout_temp_ids: dict[str, int] = {}
+        self.correlation_temp_ids: dict[str, int] = {}
+        self.temp_id_counter = 0
+
         self.stats = {
             "records": 0,
             "workouts": 0,
@@ -88,17 +107,17 @@ class AppleHealthParser:
         event, root = next(context)
 
         # Current element being processed
-        health_data = None
-        current_correlation = None
-        current_workout = None
-        current_audiogram = None
-        current_vision_prescription = None
-        current_record = None
-        current_hrv_list = None
+        health_data: HealthData | None = None
+        current_correlation: Correlation | None = None
+        current_workout: Workout | None = None
+        current_audiogram: Audiogram | None = None
+        current_vision_prescription: VisionPrescription | None = None
+        current_record: Record | None = None
+        current_hrv_list: HeartRateVariabilityMetadataList | None = None
 
         # Track parent elements for metadata
-        current_parent_type = None
-        current_parent_id = None
+        current_parent_type: str | None = None
+        current_parent_id: int | None = None
 
         with Session(self.engine) as session:
             try:
@@ -184,12 +203,10 @@ class AppleHealthParser:
                             elif (
                                 elem.tag == "Record" and health_data and health_data.id
                             ):
-                                # Check if inside a correlation
-                                if current_correlation and current_correlation.id:
-                                    # Parse record but don't add to batch yet
-                                    record = self._parse_record(elem, health_data.id)
+                                record = self._parse_record(elem, health_data.id)
 
-                                    # Check for duplicate
+                                # Check if inside a correlation - always use individual processing
+                                if current_correlation and current_correlation.id:
                                     existing = self._check_duplicate_record(
                                         session, record
                                     )
@@ -198,11 +215,9 @@ class AppleHealthParser:
                                         record = existing
                                     else:
                                         session.add(record)
-                                        session.commit()  # Need ID for relationship
+                                        session.commit()
 
-                                    # Create correlation-record link if record was saved
                                     if record.id:
-                                        # Check if link already exists
                                         existing_link = (
                                             self._check_duplicate_correlation_record(
                                                 session,
@@ -218,9 +233,7 @@ class AppleHealthParser:
                                             self._add_to_batch(session, link)
                                             self.stats["correlation_records"] += 1
                                 else:
-                                    record = self._parse_record(elem, health_data.id)
-
-                                    # Check for duplicate
+                                    # Regular records - check for duplicate and use batched commits
                                     existing = self._check_duplicate_record(
                                         session, record
                                     )
@@ -231,9 +244,18 @@ class AppleHealthParser:
                                         current_parent_id = existing.id
                                     else:
                                         session.add(record)
-                                        session.commit()  # Need ID for potential metadata
+                                        self.pending_commits += 1
                                         current_record = record
                                         current_parent_type = "record"
+                                        # Defer commit for batching
+                                        if (
+                                            self.pending_commits
+                                            >= self.transaction_batch_size
+                                        ):
+                                            session.commit()
+                                            self.pending_commits = 0
+                                        else:
+                                            session.flush()  # Get ID without committing
                                         current_parent_id = record.id
                                         self.stats["records"] += 1
 
@@ -255,8 +277,17 @@ class AppleHealthParser:
                                     current_correlation = existing
                                 else:
                                     session.add(correlation)
-                                    session.commit()
+                                    self.pending_commits += 1
                                     current_correlation = correlation
+                                    # Defer commit for batching
+                                    if (
+                                        self.pending_commits
+                                        >= self.transaction_batch_size
+                                    ):
+                                        session.commit()
+                                        self.pending_commits = 0
+                                    else:
+                                        session.flush()  # Get ID without committing
                                     self.stats["correlations"] += 1
 
                                 current_parent_type = "correlation"
@@ -276,8 +307,17 @@ class AppleHealthParser:
                                     current_workout = existing
                                 else:
                                     session.add(workout)
-                                    session.commit()
+                                    self.pending_commits += 1
                                     current_workout = workout
+                                    # Defer commit for batching
+                                    if (
+                                        self.pending_commits
+                                        >= self.transaction_batch_size
+                                    ):
+                                        session.commit()
+                                        self.pending_commits = 0
+                                    else:
+                                        session.flush()  # Get ID without committing
                                     self.stats["workouts"] += 1
 
                                 current_parent_type = "workout"
@@ -489,8 +529,13 @@ class AppleHealthParser:
                         while elem.getprevious() is not None:
                             del elem.getparent()[0]
 
-                # Flush any remaining batch
-                self._flush_batch(session)
+                # Final commit for any pending transactions
+                if self.pending_commits > 0:
+                    session.commit()
+                    self.pending_commits = 0
+
+                # Flush any remaining batches
+                self._flush_all_batches(session)
                 pbar.close()
 
             except Exception as e:
@@ -515,6 +560,137 @@ class AppleHealthParser:
             session.commit()
             self.current_batch = []
 
+    def _create_indexes(self) -> None:
+        """Create database indexes for performance."""
+        from sqlalchemy import text
+
+        with Session(self.engine) as session:
+            # Indexes for duplicate checking
+            indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_record_duplicate ON record (type, start_date, end_date, health_data_id, value)",
+                "CREATE INDEX IF NOT EXISTS idx_workout_duplicate ON workout (workout_activity_type, start_date, end_date, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_correlation_duplicate ON correlation (type, start_date, end_date, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_activity_summary_duplicate ON activitysummary (date_components, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_clinical_record_duplicate ON clinicalrecord (identifier, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_audiogram_duplicate ON audiogram (type, start_date, end_date, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_vision_prescription_duplicate ON visionprescription (type, date_issued, health_data_id)",
+                "CREATE INDEX IF NOT EXISTS idx_correlation_record_duplicate ON correlationrecord (correlation_id, record_id)",
+            ]
+            for index_sql in indexes:
+                try:
+                    session.exec(text(index_sql))
+                except Exception as e:
+                    print(f"Index creation warning: {e}")
+            session.commit()
+
+    def _bulk_insert_records(self, session: Session) -> None:
+        """Bulk insert records with batch duplicate checking."""
+        if not self.records_batch:
+            return
+
+        # Group records by type for efficient duplicate checking
+        records_by_type: dict[tuple[str | None, int], list[Record]] = {}
+        for record in self.records_batch:
+            key = (record.type, record.health_data_id)
+            if key not in records_by_type:
+                records_by_type[key] = []
+            records_by_type[key].append(record)
+
+        new_records = []
+        for (record_type, health_data_id), type_records in records_by_type.items():
+            # Batch check for existing records of this type
+            start_dates = [r.start_date for r in type_records]
+            end_dates = [r.end_date for r in type_records]
+            values = [r.value for r in type_records]
+
+            # Build query conditions
+            stmt = select(Record).where(
+                Record.type == record_type,
+                Record.health_data_id == health_data_id,
+            )
+            
+            if start_dates:
+                from sqlalchemy import or_
+                date_conditions = []
+                for i, (start_date, end_date) in enumerate(zip(start_dates, end_dates)):
+                    date_conditions.append(
+                        (Record.start_date == start_date) & (Record.end_date == end_date)
+                    )
+                if date_conditions:
+                    stmt = stmt.where(or_(*date_conditions))
+                    
+            existing_records = session.exec(stmt).all()
+
+            # Create lookup set for existing records
+            existing_set: set[tuple[datetime, datetime, str | None]] = set()
+            for existing in existing_records:
+                key = (existing.start_date, existing.end_date, existing.value)
+                existing_set.add(key)
+
+            # Filter out duplicates
+            for record in type_records:
+                record_key = (record.start_date, record.end_date, record.value)
+                if record_key in existing_set:
+                    self.stats["duplicates"] += 1
+                else:
+                    new_records.append(record)
+
+        if new_records:
+            session.add_all(new_records)
+            session.commit()
+            self.stats["records"] += len(new_records)
+
+        self.records_batch = []
+
+    def _bulk_insert_workouts(self, session: Session) -> None:
+        """Bulk insert workouts with duplicate checking."""
+        if not self.workouts_batch:
+            return
+
+        new_workouts = []
+        for workout in self.workouts_batch:
+            existing = self._check_duplicate_workout(session, workout)
+            if existing:
+                self.stats["duplicates"] += 1
+            else:
+                new_workouts.append(workout)
+
+        if new_workouts:
+            session.add_all(new_workouts)
+            session.commit()
+            self.stats["workouts"] += len(new_workouts)
+
+        self.workouts_batch = []
+
+    def _bulk_insert_correlations(self, session: Session) -> None:
+        """Bulk insert correlations with duplicate checking."""
+        if not self.correlations_batch:
+            return
+
+        new_correlations = []
+        for correlation in self.correlations_batch:
+            existing = self._check_duplicate_correlation(session, correlation)
+            if existing:
+                self.stats["duplicates"] += 1
+            else:
+                new_correlations.append(correlation)
+
+        if new_correlations:
+            session.add_all(new_correlations)
+            session.commit()
+            self.stats["correlations"] += len(new_correlations)
+
+        self.correlations_batch = []
+
+    def _flush_all_batches(self, session: Session) -> None:
+        """Flush all bulk batches to database."""
+        if self.bulk_mode:
+            self._bulk_insert_records(session)
+            self._bulk_insert_workouts(session)
+            self._bulk_insert_correlations(session)
+            session.commit()
+        self._flush_batch(session)  # Handle remaining objects
+
     def _print_progress(self) -> None:
         """Print current parsing progress."""
         print("Final Statistics:")
@@ -537,7 +713,8 @@ class AppleHealthParser:
         if record.value is not None:
             stmt = stmt.where(Record.value == record.value)
         else:
-            stmt = stmt.where(Record.value.is_(None))
+            from sqlalchemy import sql
+            stmt = stmt.where(Record.value.is_(sql.null()))
 
         return session.exec(stmt).first()
 

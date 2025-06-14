@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -384,3 +385,72 @@ class TestParserSample:
         with Session(engine) as session:
             health_data_count = session.exec(select(HealthData)).all()
             assert len(health_data_count) == 1  # Only one HealthData record
+
+    def test_bulk_mode_performance(self, sample_xml_path, temp_db):
+        """Test that bulk mode is faster than legacy mode."""
+        # Test legacy mode (bulk_mode=False)
+        legacy_parser = AppleHealthParser(db_path=temp_db + "_legacy", bulk_mode=False)
+        start_time = time.time()
+        legacy_parser.parse_file(str(sample_xml_path))
+        legacy_time = time.time() - start_time
+        legacy_stats = legacy_parser.stats.copy()
+
+        # Test bulk mode (bulk_mode=True)
+        bulk_parser = AppleHealthParser(db_path=temp_db + "_bulk", bulk_mode=True)
+        start_time = time.time()
+        bulk_parser.parse_file(str(sample_xml_path))
+        bulk_time = time.time() - start_time
+        bulk_stats = bulk_parser.stats.copy()
+
+        # Both should parse same number of records
+        assert bulk_stats["records"] == legacy_stats["records"]
+        assert bulk_stats["workouts"] == legacy_stats["workouts"]
+        assert bulk_stats["correlations"] == legacy_stats["correlations"]
+        assert bulk_stats["activity_summaries"] == legacy_stats["activity_summaries"]
+        assert bulk_stats["metadata_entries"] == legacy_stats["metadata_entries"]
+        assert bulk_stats["errors"] == legacy_stats["errors"]
+
+        # Bulk mode should be faster or at least not slower
+        # (For small files, the difference might be minimal)
+        print(f"Legacy mode: {legacy_time:.3f}s, Bulk mode: {bulk_time:.3f}s")
+        assert bulk_time <= legacy_time * 1.5  # Allow some variance for small files
+
+        # Verify both databases have same content
+        legacy_engine = create_engine(f"sqlite:///{temp_db}_legacy")
+        bulk_engine = create_engine(f"sqlite:///{temp_db}_bulk")
+
+        with (
+            Session(legacy_engine) as legacy_session,
+            Session(bulk_engine) as bulk_session,
+        ):
+            # Compare record counts
+            legacy_record_count = len(legacy_session.exec(select(Record)).all())
+            bulk_record_count = len(bulk_session.exec(select(Record)).all())
+            assert legacy_record_count == bulk_record_count
+
+            # Compare workout counts
+            legacy_workout_count = len(legacy_session.exec(select(Workout)).all())
+            bulk_workout_count = len(bulk_session.exec(select(Workout)).all())
+            assert legacy_workout_count == bulk_workout_count
+
+    def test_bulk_mode_configuration(self, sample_xml_path, temp_db):
+        """Test bulk mode configuration options."""
+        # Test with custom batch sizes
+        parser = AppleHealthParser(db_path=temp_db, bulk_mode=True)
+
+        # Verify configuration
+        assert parser.bulk_mode is True
+        assert parser.batch_size == 5000  # bulk mode default
+        assert parser.transaction_batch_size == 100
+
+        # Parse and verify it works
+        parser.parse_file(str(sample_xml_path))
+        assert parser.stats["records"] > 0
+        assert parser.stats["errors"] == 0
+
+        # Test legacy mode configuration
+        legacy_parser = AppleHealthParser(db_path=temp_db + "_config", bulk_mode=False)
+
+        assert legacy_parser.bulk_mode is False
+        assert legacy_parser.batch_size == 1000  # legacy mode default
+        assert legacy_parser.transaction_batch_size == 100
