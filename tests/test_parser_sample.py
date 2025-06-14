@@ -3,7 +3,7 @@
 import os
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -46,8 +46,8 @@ class TestParserSample:
 
     def test_parse_sample_file(self, sample_xml_path, temp_db):
         """Test parsing the complete sample file."""
-        # Create parser with temp database
-        parser = AppleHealthParser(db_path=temp_db)
+        # Create parser with temp database and 2-year cutoff to include test data
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
 
         # Parse the sample file
         parser.parse_file(str(sample_xml_path))
@@ -78,7 +78,7 @@ class TestParserSample:
 
     def test_blood_glucose_records(self, sample_xml_path, temp_db):
         """Test parsing of blood glucose records."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -113,7 +113,7 @@ class TestParserSample:
 
     def test_heart_rate_records(self, sample_xml_path, temp_db):
         """Test parsing of heart rate records."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -135,7 +135,7 @@ class TestParserSample:
 
     def test_blood_pressure_correlation(self, sample_xml_path, temp_db):
         """Test parsing of blood pressure correlation."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -170,7 +170,7 @@ class TestParserSample:
 
     def test_workout_records(self, sample_xml_path, temp_db):
         """Test parsing of workout records."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -233,7 +233,7 @@ class TestParserSample:
 
     def test_activity_summaries(self, sample_xml_path, temp_db):
         """Test parsing of activity summaries."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -254,7 +254,7 @@ class TestParserSample:
 
     def test_sleep_analysis_records(self, sample_xml_path, temp_db):
         """Test parsing of sleep analysis records."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -285,7 +285,7 @@ class TestParserSample:
 
     def test_various_record_types(self, sample_xml_path, temp_db):
         """Test parsing of various other record types."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -330,7 +330,7 @@ class TestParserSample:
 
     def test_parser_statistics(self, sample_xml_path, temp_db):
         """Test parser statistics after parsing."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         # Check statistics
@@ -346,7 +346,7 @@ class TestParserSample:
 
     def test_metadata_entries(self, sample_xml_path, temp_db):
         """Test parsing of metadata entries."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
 
         engine = create_engine(f"sqlite:///{temp_db}")
@@ -375,13 +375,13 @@ class TestParserSample:
 
     def test_duplicate_handling(self, sample_xml_path, temp_db):
         """Test that parsing the same file twice doesn't create duplicates."""
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
 
         # Parse once
         parser.parse_file(str(sample_xml_path))
 
         # Parse again
-        parser = AppleHealthParser(db_path=temp_db)
+        parser = AppleHealthParser(db_path=temp_db, data_cutoff=timedelta(days=9999))
         parser.parse_file(str(sample_xml_path))
         second_stats = parser.stats.copy()
 
@@ -400,14 +400,14 @@ class TestParserSample:
     def test_bulk_mode_performance(self, sample_xml_path, temp_db):
         """Test that bulk mode is faster than legacy mode."""
         # Test legacy mode (bulk_mode=False)
-        legacy_parser = AppleHealthParser(db_path=temp_db + "_legacy", bulk_mode=False)
+        legacy_parser = AppleHealthParser(db_path=temp_db + "_legacy", bulk_mode=False, data_cutoff=timedelta(days=9999))
         start_time = time.time()
         legacy_parser.parse_file(str(sample_xml_path))
         legacy_time = time.time() - start_time
         legacy_stats = legacy_parser.stats.copy()
 
         # Test bulk mode (bulk_mode=True)
-        bulk_parser = AppleHealthParser(db_path=temp_db + "_bulk", bulk_mode=True)
+        bulk_parser = AppleHealthParser(db_path=temp_db + "_bulk", bulk_mode=True, data_cutoff=timedelta(days=9999))
         start_time = time.time()
         bulk_parser.parse_file(str(sample_xml_path))
         bulk_time = time.time() - start_time
@@ -447,7 +447,7 @@ class TestParserSample:
     def test_bulk_mode_configuration(self, sample_xml_path, temp_db):
         """Test bulk mode configuration options."""
         # Test with custom batch sizes
-        parser = AppleHealthParser(db_path=temp_db, bulk_mode=True)
+        parser = AppleHealthParser(db_path=temp_db, bulk_mode=True, data_cutoff=timedelta(days=9999))
 
         # Verify configuration
         assert parser.bulk_mode is True
@@ -460,7 +460,7 @@ class TestParserSample:
         assert parser.stats["errors"] == 0
 
         # Test legacy mode configuration
-        legacy_parser = AppleHealthParser(db_path=temp_db + "_config", bulk_mode=False)
+        legacy_parser = AppleHealthParser(db_path=temp_db + "_config", bulk_mode=False, data_cutoff=timedelta(days=9999))
 
         assert legacy_parser.bulk_mode is False
         assert legacy_parser.batch_size == 1000  # legacy mode default

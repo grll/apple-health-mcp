@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -34,8 +34,14 @@ from .models import (
 class AppleHealthParser:
     """Parser for Apple Health export XML files with streaming support."""
 
-    def __init__(self, db_path: str = "data/sqlite.db", bulk_mode: bool = True):
-        """Initialize parser with database connection."""
+    def __init__(self, db_path: str = "data/sqlite.db", bulk_mode: bool = True, data_cutoff: timedelta = timedelta(days=180)):
+        """Initialize parser with database connection.
+        
+        Args:
+            db_path: Path to SQLite database
+            bulk_mode: Enable bulk processing for better performance
+            data_cutoff: Only process records newer than this timedelta (default: 6 months)
+        """
         # Create data directory if it doesn't exist
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -52,6 +58,10 @@ class AppleHealthParser:
         self.transaction_batch_size = 100  # Commit every N entities
         self.current_batch: list[Any] = []
         self.pending_commits = 0
+
+        # Data filtering settings
+        self.data_cutoff = data_cutoff
+        self.cutoff_date = datetime.now(ZoneInfo("Europe/Zurich")) - data_cutoff
 
         # Bulk processing collections
         self.records_batch: list[Record] = []
@@ -78,6 +88,7 @@ class AppleHealthParser:
             "correlation_records": 0,
             "errors": 0,
             "duplicates": 0,
+            "filtered_old": 0,
         }
 
     def parse_file(self, xml_path: str) -> None:
@@ -146,12 +157,13 @@ class AppleHealthParser:
 
                         # Update description with current stats every 5000 records
                         total_processed = (
-                            self.stats["records"] + self.stats["duplicates"]
+                            self.stats["records"] + self.stats["duplicates"] + self.stats["filtered_old"]
                         )
                         if total_processed % 5000 == 0 and total_processed > 0:
                             pbar.set_description(
                                 f"Records: {self.stats['records']:,} | "
                                 f"Duplicates: {self.stats['duplicates']:,} | "
+                                f"Filtered: {self.stats['filtered_old']:,} | "
                                 f"Errors: {self.stats['errors']:,}"
                             )
 
@@ -204,6 +216,11 @@ class AppleHealthParser:
                                 elem.tag == "Record" and health_data and health_data.id
                             ):
                                 record = self._parse_record(elem, health_data.id)
+
+                                # Filter by cutoff date
+                                if record.start_date < self.cutoff_date:
+                                    self.stats["filtered_old"] += 1
+                                    continue
 
                                 # Check if inside a correlation - always use individual processing
                                 if current_correlation and current_correlation.id:
@@ -268,6 +285,11 @@ class AppleHealthParser:
                                     elem, health_data.id
                                 )
 
+                                # Filter by cutoff date
+                                if correlation.start_date < self.cutoff_date:
+                                    self.stats["filtered_old"] += 1
+                                    continue
+
                                 # Check for duplicate
                                 existing = self._check_duplicate_correlation(
                                     session, correlation
@@ -297,6 +319,11 @@ class AppleHealthParser:
                                 elem.tag == "Workout" and health_data and health_data.id
                             ):
                                 workout = self._parse_workout(elem, health_data.id)
+
+                                # Filter by cutoff date
+                                if workout.start_date < self.cutoff_date:
+                                    self.stats["filtered_old"] += 1
+                                    continue
 
                                 # Check for duplicate
                                 existing = self._check_duplicate_workout(
@@ -367,6 +394,11 @@ class AppleHealthParser:
                                 and health_data.id
                             ):
                                 audiogram = self._parse_audiogram(elem, health_data.id)
+
+                                # Filter by cutoff date
+                                if audiogram.start_date < self.cutoff_date:
+                                    self.stats["filtered_old"] += 1
+                                    continue
 
                                 # Check for duplicate
                                 existing = self._check_duplicate_audiogram(
@@ -554,7 +586,7 @@ class AppleHealthParser:
 
         # Final statistics
         self._print_progress()
-        print("Parsing complete!")
+        print(f"Parsing complete! Data cutoff: {self.cutoff_date.isoformat()}")
 
     def _add_to_batch(self, session: Session, obj: Any) -> None:
         """Add object to batch and flush if necessary."""
@@ -587,7 +619,7 @@ class AppleHealthParser:
             ]
             for index_sql in indexes:
                 try:
-                    session.exec(text(index_sql))
+                    session.execute(text(index_sql))
                 except Exception as e:
                     print(f"Index creation warning: {e}")
             session.commit()
@@ -600,7 +632,7 @@ class AppleHealthParser:
         # Group records by type for efficient duplicate checking
         records_by_type: dict[tuple[str | None, int], list[Record]] = {}
         for record in self.records_batch:
-            key = (record.type, record.health_data_id)
+            key = (record.type, record.health_data_id or 0)
             if key not in records_by_type:
                 records_by_type[key] = []
             records_by_type[key].append(record)
@@ -634,8 +666,8 @@ class AppleHealthParser:
             # Create lookup set for existing records
             existing_set: set[tuple[datetime, datetime, str | None]] = set()
             for existing in existing_records:
-                key = (existing.start_date, existing.end_date, existing.value)
-                existing_set.add(key)
+                lookup_key = (existing.start_date, existing.end_date, existing.value)
+                existing_set.add(lookup_key)
 
             # Filter out duplicates
             for record in type_records:
@@ -723,9 +755,7 @@ class AppleHealthParser:
         if record.value is not None:
             stmt = stmt.where(Record.value == record.value)
         else:
-            from sqlalchemy import sql
-
-            stmt = stmt.where(Record.value.is_(sql.null()))
+            stmt = stmt.where(Record.value.is_(None))
 
         return session.exec(stmt).first()
 
